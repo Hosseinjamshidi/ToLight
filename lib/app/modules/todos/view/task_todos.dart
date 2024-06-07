@@ -1,4 +1,4 @@
-import 'package:todark/app/data/schema.dart';
+import 'package:todark/app/data/models.dart';
 import 'package:todark/app/controller/todo_controller.dart';
 import 'package:todark/app/modules/tasks/widgets/tasks_action.dart';
 import 'package:todark/app/modules/todos/widgets/todos_action.dart';

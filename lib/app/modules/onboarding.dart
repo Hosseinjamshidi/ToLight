@@ -1,9 +1,8 @@
-import 'package:todark/app/data/schema.dart';
-import 'package:todark/app/modules/home.dart';
-import 'package:todark/app/widgets/button.dart';
-import 'package:todark/main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:todark/app/modules/home.dart';
+import 'package:todark/app/widgets/button.dart';
 
 class OnBording extends StatefulWidget {
   const OnBording({super.key});
@@ -28,9 +27,14 @@ class _OnBordingState extends State<OnBording> {
     super.dispose();
   }
 
-  void onBoardHome() {
-    settings.onboard = true;
-    isar.writeTxnSync(() => isar.settings.putSync(settings));
+  void onBoardHome() async {
+    FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+    // Update Firestore settings
+    await firestore.collection('settings').doc('settings').update({
+      'onboard': true,
+    });
+
     Get.off(() => const HomePage(), transition: Transition.downToUp);
   }
 

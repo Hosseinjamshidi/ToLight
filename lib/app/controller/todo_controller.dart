@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:isar/isar.dart';
-import 'package:todark/app/data/schema.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:todark/app/data/models.dart';
 import 'package:todark/app/services/notification.dart';
 import 'package:todark/main.dart';
 
@@ -31,27 +31,55 @@ class TodoController extends GetxController {
   TextEditingController descTodoEdit = TextEditingController();
   TextEditingController timeTodoEdit = TextEditingController();
 
+  FirebaseFirestore firestore = FirebaseFirestore.instance;
+
   @override
   void onInit() {
     super.onInit();
-    tasks.assignAll(isar.tasks.where().findAllSync());
-    todos.assignAll(isar.todos.where().findAllSync());
+    loadTasks();
+    loadTodos();
+  }
+
+  Future<List<Tasks>> getTasks() async {
+    var querySnapshot = await firestore
+        .collection('tasks')
+        .where('archive', isEqualTo: false)
+        .get();
+    return querySnapshot.docs.map((doc) => Tasks.fromFirestore(doc)).toList();
+  }
+
+  Future<void> loadTasks() async {
+    var querySnapshot = await firestore.collection('tasks').get();
+    tasks.assignAll(
+        querySnapshot.docs.map((doc) => Tasks.fromFirestore(doc)).toList());
+  }
+
+  Future<void> loadTodos() async {
+    var querySnapshot = await firestore.collection('todos').get();
+    todos.assignAll(
+        querySnapshot.docs.map((doc) => Todos.fromFirestore(doc)).toList());
   }
 
   // Tasks
   Future<void> addTask(String title, String desc, Color myColor) async {
-    List<Tasks> searchTask;
-    searchTask = isar.tasks.filter().titleEqualTo(title).findAllSync();
+    var searchTask = await firestore
+        .collection('tasks')
+        .where('title', isEqualTo: title)
+        .get();
 
     final taskCreate = Tasks(
+      id: DateTime.now().millisecondsSinceEpoch,
       title: title,
       description: desc,
       taskColor: myColor.value,
     );
 
-    if (searchTask.isEmpty) {
+    if (searchTask.docs.isEmpty) {
       tasks.add(taskCreate);
-      isar.writeTxnSync(() => isar.tasks.putSync(taskCreate));
+      await firestore
+          .collection('tasks')
+          .doc(taskCreate.id.toString())
+          .set(taskCreate.toFirestore());
       EasyLoading.showSuccess('createCategory'.tr, duration: duration);
     } else {
       EasyLoading.showError('duplicateCategory'.tr, duration: duration);
@@ -60,12 +88,13 @@ class TodoController extends GetxController {
 
   Future<void> updateTask(
       Tasks task, String title, String desc, Color myColor) async {
-    isar.writeTxnSync(() {
-      task.title = title;
-      task.description = desc;
-      task.taskColor = myColor.value;
-      isar.tasks.putSync(task);
-    });
+    task.title = title;
+    task.description = desc;
+    task.taskColor = myColor.value;
+    await firestore
+        .collection('tasks')
+        .doc(task.id.toString())
+        .update(task.toFirestore());
 
     var newTask = task;
     int oldIdx = tasks.indexOf(task);
@@ -81,27 +110,34 @@ class TodoController extends GetxController {
 
     for (var task in taskListCopy) {
       // Delete Notification
-      List<Todos> getTodo;
-      getTodo =
-          isar.todos.filter().task((q) => q.idEqualTo(task.id)).findAllSync();
+      var getTodo = await firestore
+          .collection('todos')
+          .where('taskId', isEqualTo: task.id)
+          .get();
 
-      for (var todo in getTodo) {
-        if (todo.todoCompletedTime != null) {
-          if (todo.todoCompletedTime!.isAfter(now)) {
-            await flutterLocalNotificationsPlugin.cancel(todo.id);
+      for (var todo in getTodo.docs) {
+        var todoData = Todos.fromFirestore(todo);
+        if (todoData.todoCompletedTime != null) {
+          if (todoData.todoCompletedTime!.isAfter(now)) {
+            await flutterLocalNotificationsPlugin.cancel(todoData.id);
           }
         }
       }
       // Delete Todos
-      todos.removeWhere((todo) => todo.task.value?.id == task.id);
-      isar.writeTxnSync(() => isar.todos
-          .filter()
-          .task((q) => q.idEqualTo(task.id))
-          .deleteAllSync());
+      todos.removeWhere((todo) => todo.taskId == task.id);
+      await firestore
+          .collection('todos')
+          .where('taskId', isEqualTo: task.id)
+          .get()
+          .then((querySnapshot) {
+        for (var doc in querySnapshot.docs) {
+          firestore.collection('todos').doc(doc.id).delete();
+        }
+      });
 
       // Delete Task
       tasks.remove(task);
-      isar.writeTxnSync(() => isar.tasks.deleteSync(task.id));
+      await firestore.collection('tasks').doc(task.id.toString()).delete();
       EasyLoading.showSuccess('categoryDelete'.tr, duration: duration);
     }
   }
@@ -111,22 +147,25 @@ class TodoController extends GetxController {
 
     for (var task in taskListCopy) {
       // Delete Notification
-      List<Todos> getTodo;
-      getTodo =
-          isar.todos.filter().task((q) => q.idEqualTo(task.id)).findAllSync();
+      var getTodo = await firestore
+          .collection('todos')
+          .where('taskId', isEqualTo: task.id)
+          .get();
 
-      for (var todo in getTodo) {
-        if (todo.todoCompletedTime != null) {
-          if (todo.todoCompletedTime!.isAfter(now)) {
-            await flutterLocalNotificationsPlugin.cancel(todo.id);
+      for (var todo in getTodo.docs) {
+        var todoData = Todos.fromFirestore(todo);
+        if (todoData.todoCompletedTime != null) {
+          if (todoData.todoCompletedTime!.isAfter(now)) {
+            await flutterLocalNotificationsPlugin.cancel(todoData.id);
           }
         }
       }
       // Archive Task
-      isar.writeTxnSync(() {
-        task.archive = true;
-        isar.tasks.putSync(task);
-      });
+      task.archive = true;
+      await firestore
+          .collection('tasks')
+          .doc(task.id.toString())
+          .update(task.toFirestore());
       tasks.refresh();
       todos.refresh();
       EasyLoading.showSuccess('categoryArchive'.tr, duration: duration);
@@ -138,27 +177,30 @@ class TodoController extends GetxController {
 
     for (var task in taskListCopy) {
       // Create Notification
-      List<Todos> getTodo;
-      getTodo =
-          isar.todos.filter().task((q) => q.idEqualTo(task.id)).findAllSync();
+      var getTodo = await firestore
+          .collection('todos')
+          .where('taskId', isEqualTo: task.id)
+          .get();
 
-      for (var todo in getTodo) {
-        if (todo.todoCompletedTime != null) {
-          if (todo.todoCompletedTime!.isAfter(now)) {
+      for (var todo in getTodo.docs) {
+        var todoData = Todos.fromFirestore(todo);
+        if (todoData.todoCompletedTime != null) {
+          if (todoData.todoCompletedTime!.isAfter(now)) {
             NotificationShow().showNotification(
-              todo.id,
-              todo.name,
-              todo.description,
-              todo.todoCompletedTime,
+              todoData.id,
+              todoData.name,
+              todoData.description,
+              todoData.todoCompletedTime,
             );
           }
         }
       }
       // No archive Task
-      isar.writeTxnSync(() {
-        task.archive = false;
-        isar.tasks.putSync(task);
-      });
+      task.archive = false;
+      await firestore
+          .collection('tasks')
+          .doc(task.id.toString())
+          .update(task.toFirestore());
       tasks.refresh();
       todos.refresh();
       EasyLoading.showSuccess('noCategoryArchive'.tr, duration: duration);
@@ -174,26 +216,27 @@ class TodoController extends GetxController {
           ? DateFormat.yMMMEd(locale.languageCode).add_jm().parse(time)
           : DateFormat.yMMMEd(locale.languageCode).add_Hm().parse(time);
     }
-    List<Todos> getTodos;
-    getTodos = isar.todos
-        .filter()
-        .nameEqualTo(title)
-        .task((q) => q.idEqualTo(task.id))
-        .todoCompletedTimeEqualTo(date)
-        .findAllSync();
+    var getTodos = await firestore
+        .collection('todos')
+        .where('name', isEqualTo: title)
+        .where('taskId', isEqualTo: task.id)
+        .where('todoCompletedTime', isEqualTo: date)
+        .get();
 
     final todosCreate = Todos(
+      id: DateTime.now().millisecondsSinceEpoch,
       name: title,
       description: desc,
       todoCompletedTime: date,
-    )..task.value = task;
+      taskId: task.id,
+    );
 
-    if (getTodos.isEmpty) {
+    if (getTodos.docs.isEmpty) {
       todos.add(todosCreate);
-      isar.writeTxnSync(() {
-        isar.todos.putSync(todosCreate);
-        todosCreate.task.saveSync();
-      });
+      await firestore
+          .collection('todos')
+          .doc(todosCreate.id.toString())
+          .set(todosCreate.toFirestore());
       if (date != null && now.isBefore(date)) {
         NotificationShow().showNotification(
           todosCreate.id,
@@ -209,15 +252,19 @@ class TodoController extends GetxController {
   }
 
   Future<void> updateTodoCheck(Todos todo) async {
-    isar.writeTxnSync(() => isar.todos.putSync(todo));
+    await firestore
+        .collection('todos')
+        .doc(todo.id.toString())
+        .update(todo.toFirestore());
     todos.refresh();
   }
 
   Future<void> updateTodoFix(Todos todo) async {
-    isar.writeTxnSync(() {
-      todo.fix = todo.fix == true ? false : true;
-      isar.todos.putSync(todo);
-    });
+    todo.fix = !todo.fix;
+    await firestore
+        .collection('todos')
+        .doc(todo.id.toString())
+        .update(todo.toFirestore());
 
     var newTodo = todo;
     int oldIdx = todos.indexOf(todo);
@@ -233,14 +280,16 @@ class TodoController extends GetxController {
           ? DateFormat.yMMMEd(locale.languageCode).add_jm().parse(time)
           : DateFormat.yMMMEd(locale.languageCode).add_Hm().parse(time);
     }
-    isar.writeTxnSync(() {
-      todo.name = title;
-      todo.description = desc;
-      todo.todoCompletedTime = date;
-      todo.task.value = task;
-      isar.todos.putSync(todo);
-      todo.task.saveSync();
-    });
+
+    todo.name = title;
+    todo.description = desc;
+    todo.todoCompletedTime = date;
+    todo.taskId = task.id;
+
+    await firestore
+        .collection('todos')
+        .doc(todo.id.toString())
+        .update(todo.toFirestore());
 
     var newTodo = todo;
     int oldIdx = todos.indexOf(todo);
@@ -265,11 +314,11 @@ class TodoController extends GetxController {
     List<Todos> todoListCopy = List.from(todoList);
 
     for (var todo in todoListCopy) {
-      isar.writeTxnSync(() {
-        todo.task.value = task;
-        isar.todos.putSync(todo);
-        todo.task.saveSync();
-      });
+      todo.taskId = task.id;
+      await firestore
+          .collection('todos')
+          .doc(todo.id.toString())
+          .update(todo.toFirestore());
 
       var newTodo = todo;
       int oldIdx = todos.indexOf(todo);
@@ -292,28 +341,28 @@ class TodoController extends GetxController {
         }
       }
       todos.remove(todo);
-      isar.writeTxnSync(() => isar.todos.deleteSync(todo.id));
+      await firestore.collection('todos').doc(todo.id.toString()).delete();
       EasyLoading.showSuccess('todoDelete'.tr, duration: duration);
     }
   }
 
   int createdAllTodos() {
-    return todos.where((todo) => todo.task.value?.archive == false).length;
+    return todos.where((todo) => todo.taskId != null).length;
   }
 
   int completedAllTodos() {
     return todos
-        .where((todo) => todo.task.value?.archive == false && todo.done == true)
+        .where((todo) => todo.taskId != null && todo.done == true)
         .length;
   }
 
   int createdAllTodosTask(Tasks task) {
-    return todos.where((todo) => todo.task.value?.id == task.id).length;
+    return todos.where((todo) => todo.taskId == task.id).length;
   }
 
   int completedAllTodosTask(Tasks task) {
     return todos
-        .where((todo) => todo.task.value?.id == task.id && todo.done == true)
+        .where((todo) => todo.taskId == task.id && todo.done == true)
         .length;
   }
 
@@ -322,7 +371,7 @@ class TodoController extends GetxController {
         .where((todo) =>
             todo.done == false &&
             todo.todoCompletedTime != null &&
-            todo.task.value?.archive == false &&
+            todo.taskId != null &&
             DateTime(date.year, date.month, date.day, 0, -1)
                 .isBefore(todo.todoCompletedTime!) &&
             DateTime(date.year, date.month, date.day, 23, 60)

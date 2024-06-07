@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:isar/isar.dart';
 import 'package:todark/app/controller/todo_controller.dart';
-import 'package:todark/app/data/schema.dart';
+import 'package:todark/app/data/models.dart';
 import 'package:todark/app/widgets/text_form.dart';
-import 'package:todark/main.dart';
 
 class TodosTransfer extends StatefulWidget {
   const TodosTransfer({
@@ -27,8 +25,7 @@ class _TodosTransferState extends State<TodosTransfer> {
   final formKeyTransfer = GlobalKey<FormState>();
 
   Future<List<Tasks>> getTaskAll(String pattern) async {
-    List<Tasks> getTask;
-    getTask = isar.tasks.filter().archiveEqualTo(false).findAllSync();
+    List<Tasks> getTask = await todoController.getTasks();
     return getTask.where((element) {
       final title = element.title.toLowerCase();
       final query = pattern.toLowerCase();

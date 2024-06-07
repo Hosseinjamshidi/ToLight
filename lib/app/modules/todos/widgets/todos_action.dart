@@ -1,8 +1,7 @@
 import 'package:bottom_picker/bottom_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
-import 'package:isar/isar.dart';
-import 'package:todark/app/data/schema.dart';
+import 'package:todark/app/data/models.dart';
 import 'package:todark/app/controller/todo_controller.dart';
 import 'package:todark/app/widgets/text_form.dart';
 import 'package:flutter/material.dart';
@@ -33,14 +32,14 @@ class _TodosActionState extends State<TodosAction> {
   final formKey = GlobalKey<FormState>();
   final todoController = Get.put(TodoController());
   Tasks? selectedTask;
-  List<Tasks>? task;
   final FocusNode focusNode = FocusNode();
 
   @override
   initState() {
     if (widget.edit) {
-      selectedTask = widget.todo!.task.value;
-      todoController.textTodoConroller.text = widget.todo!.task.value!.title;
+      selectedTask = todoController.tasks
+          .firstWhereOrNull((task) => task.id == widget.todo!.taskId);
+      todoController.textTodoConroller.text = selectedTask?.title ?? '';
       todoController.titleTodoEdit =
           TextEditingController(text: widget.todo!.name);
       todoController.descTodoEdit =
@@ -69,8 +68,8 @@ class _TodosActionState extends State<TodosAction> {
   }
 
   Future<List<Tasks>> getTaskAll(String pattern) async {
-    List<Tasks> getTask;
-    getTask = isar.tasks.filter().archiveEqualTo(false).findAllSync();
+    List<Tasks> getTask = await todoController
+        .getTasks(); // Assuming getTasks is a method in your controller that fetches tasks from Firestore
     return getTask.where((element) {
       final title = element.title.toLowerCase();
       final query = pattern.toLowerCase();

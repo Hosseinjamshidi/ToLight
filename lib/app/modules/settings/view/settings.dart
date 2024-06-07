@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:todark/app/controller/todo_controller.dart';
-import 'package:todark/app/controller/isar_contoller.dart';
-import 'package:todark/app/data/schema.dart';
-import 'package:todark/app/modules/settings/widgets/settings_card.dart';
 import 'package:todark/main.dart';
 import 'package:todark/theme/theme_controller.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:todark/app/modules/settings/widgets/settings_card.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -20,8 +18,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final todoController = Get.put(TodoController());
-  final isarController = Get.put(IsarController());
   final themeController = Get.put(ThemeController());
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
   String? appVersion;
 
   Future<void> infoVersion() async {
@@ -31,31 +29,27 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  updateLanguage(Locale locale) {
-    settings.language = '$locale';
-    isar.writeTxnSync(() => isar.settings.putSync(settings));
+  Future<void> updateLanguage(Locale locale) async {
+    await firestore
+        .collection('settings')
+        .doc('settings')
+        .update({'language': '$locale'});
     Get.updateLocale(locale);
     Get.back();
   }
 
-  String firstDayOfWeek(newValue) {
-    if (newValue == 'monday'.tr) {
-      return 'monday';
-    } else if (newValue == 'tuesday'.tr) {
-      return 'tuesday';
-    } else if (newValue == 'wednesday'.tr) {
-      return 'wednesday';
-    } else if (newValue == 'thursday'.tr) {
-      return 'thursday';
-    } else if (newValue == 'friday'.tr) {
-      return 'friday';
-    } else if (newValue == 'saturday'.tr) {
-      return 'saturday';
-    } else if (newValue == 'sunday'.tr) {
-      return 'sunday';
-    } else {
-      return 'monday';
-    }
+  String firstDayOfWeek(String newValue) {
+    Map<String, String> translations = {
+      'monday'.tr: 'monday',
+      'tuesday'.tr: 'tuesday',
+      'wednesday'.tr: 'wednesday',
+      'thursday'.tr: 'thursday',
+      'friday'.tr: 'friday',
+      'saturday'.tr: 'saturday',
+      'sunday'.tr: 'sunday',
+    };
+
+    return translations[newValue] ?? 'monday';
   }
 
   @override
@@ -162,10 +156,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 switcher: true,
                                 value: settings.isImage,
                                 onChange: (value) {
-                                  isar.writeTxnSync(() {
-                                    settings.isImage = value;
-                                    isar.settings.putSync(settings);
-                                  });
+                                  firestore
+                                      .collection('settings')
+                                      .doc('settings')
+                                      .update({'isImage': value});
                                   MyApp.updateAppState(context,
                                       newIsImage: value);
                                 },
@@ -212,10 +206,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                 dropdownName: settings.timeformat.tr,
                                 dropdownList: <String>['12'.tr, '24'.tr],
                                 dropdownCange: (String? newValue) {
-                                  isar.writeTxnSync(() {
-                                    settings.timeformat =
-                                        newValue == '12'.tr ? '12' : '24';
-                                    isar.settings.putSync(settings);
+                                  firestore
+                                      .collection('settings')
+                                      .doc('settings')
+                                      .update({
+                                    'timeformat':
+                                        newValue == '12'.tr ? '12' : '24'
                                   });
                                   MyApp.updateAppState(context,
                                       newTimeformat:
@@ -239,88 +235,22 @@ class _SettingsPageState extends State<SettingsPage> {
                                   'sunday'.tr,
                                 ],
                                 dropdownCange: (String? newValue) {
-                                  isar.writeTxnSync(() {
-                                    if (newValue == 'monday'.tr) {
-                                      settings.firstDay = 'monday';
-                                    } else if (newValue == 'tuesday'.tr) {
-                                      settings.firstDay = 'tuesday';
-                                    } else if (newValue == 'wednesday'.tr) {
-                                      settings.firstDay = 'wednesday';
-                                    } else if (newValue == 'thursday'.tr) {
-                                      settings.firstDay = 'thursday';
-                                    } else if (newValue == 'friday'.tr) {
-                                      settings.firstDay = 'friday';
-                                    } else if (newValue == 'saturday'.tr) {
-                                      settings.firstDay = 'saturday';
-                                    } else if (newValue == 'sunday'.tr) {
-                                      settings.firstDay = 'sunday';
-                                    }
-                                    isar.settings.putSync(settings);
-                                  });
-                                  MyApp.updateAppState(context,
-                                      newTimeformat: firstDayOfWeek(newValue));
-                                  setState(() {});
+                                  if (newValue != null) {
+                                    final firstDay = firstDayOfWeek(newValue);
+                                    firestore
+                                        .collection('settings')
+                                        .doc('settings')
+                                        .update({
+                                      'firstDay': firstDay,
+                                    });
+                                    MyApp.updateAppState(context,
+                                        newTimeformat: firstDay);
+                                    setState(() {});
+                                  }
                                 },
                               ),
-                              SettingCard(
-                                elevation: 4,
-                                icon: const Icon(Iconsax.cloud_plus),
-                                text: 'backup'.tr,
-                                onPressed: isarController.createBackUp,
-                              ),
-                              SettingCard(
-                                elevation: 4,
-                                icon: const Icon(Iconsax.cloud_add),
-                                text: 'restore'.tr,
-                                onPressed: isarController.restoreDB,
-                              ),
-                              SettingCard(
-                                elevation: 4,
-                                icon: const Icon(Iconsax.cloud_minus),
-                                text: 'deleteAllBD'.tr,
-                                onPressed: () => showAdaptiveDialog(
-                                  context: context,
-                                  builder: (BuildContext context) =>
-                                      AlertDialog.adaptive(
-                                    title: Text(
-                                      'deleteAllBDTitle'.tr,
-                                      style: context.textTheme.titleLarge,
-                                    ),
-                                    content: Text(
-                                      'deleteAllBDQuery'.tr,
-                                      style: context.textTheme.titleMedium,
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                          onPressed: () => Get.back(),
-                                          child: Text('cancel'.tr,
-                                              style: context
-                                                  .theme.textTheme.titleMedium
-                                                  ?.copyWith(
-                                                      color:
-                                                          Colors.blueAccent))),
-                                      TextButton(
-                                          onPressed: () {
-                                            isar.writeTxnSync(() {
-                                              isar.todos.clearSync();
-                                              isar.tasks.clearSync();
-                                              todoController.tasks.clear();
-                                              todoController.todos.clear();
-                                            });
-                                            EasyLoading.showSuccess(
-                                                'deleteAll'.tr);
-                                            Get.back();
-                                          },
-                                          child: Text('delete'.tr,
-                                              style: context
-                                                  .theme.textTheme.titleMedium
-                                                  ?.copyWith(
-                                                      color: Colors.red))),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
+                              // Remove backup and restore since it's Isar-specific
+                              // const SizedBox(height: 10),
                             ],
                           ),
                         );

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
-import 'package:todark/app/data/schema.dart';
+import 'package:todark/app/data/models.dart';
 import 'package:todark/app/controller/todo_controller.dart';
 import 'package:todark/app/services/notification.dart';
 import 'package:todark/main.dart';
@@ -31,6 +31,9 @@ class _TodoCardState extends State<TodoCard> {
 
   @override
   Widget build(BuildContext context) {
+    Tasks? task = todoController.tasks
+        .firstWhereOrNull((task) => task.id == widget.todo.taskId);
+
     return StatefulBuilder(
       builder: (context, innerState) {
         return GestureDetector(
@@ -102,7 +105,7 @@ class _TodoCardState extends State<TodoCard> {
                                   : const SizedBox.shrink(),
                               widget.allTodos || widget.calendare
                                   ? Text(
-                                      widget.todo.task.value!.title,
+                                      task?.title ?? '',
                                       style:
                                           context.textTheme.bodyLarge?.copyWith(
                                         color: Colors.grey,

@@ -1,29 +1,27 @@
-import 'dart:io';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:time_machine/time_machine.dart';
-import 'package:todark/app/controller/isar_contoller.dart';
-import 'package:todark/app/modules/home.dart';
-import 'package:todark/app/modules/onboarding.dart';
-import 'package:todark/theme/theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:isar/isar.dart';
-import 'package:todark/theme/theme_controller.dart';
-import 'app/data/schema.dart';
-import 'translation/translation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+
+import 'platform_utils.dart' if (dart.library.html) 'platform_utils_web.dart';
+import 'theme/theme_controller.dart';
+import 'translation/translation.dart';
+import 'app/modules/home.dart';
+import 'app/modules/onboarding.dart';
+import 'theme/theme.dart';
 
 FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-late Isar isar;
 late Settings settings;
 
 bool amoledTheme = false;
@@ -49,21 +47,21 @@ final List appLanguages = [
   {'name': '中文(繁體)', 'locale': const Locale('zh', 'TW')},
 ];
 
-void main() async {
-  final String timeZoneName;
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  await initSettings(); // Ensure settings are initialized before running the app
+
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(systemNavigationBarColor: Colors.black));
-  if (Platform.isAndroid) {
-    await setOptimalDisplayMode();
-  }
-  if (Platform.isAndroid || Platform.isIOS) {
-    timeZoneName = await FlutterTimezone.getLocalTimezone();
-  } else {
-    timeZoneName = '${DateTimeZone.local}';
-  }
+
+  final String timeZoneName = await getLocalTimezone();
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation(timeZoneName));
+
   const DarwinInitializationSettings initializationSettingsIos =
       DarwinInitializationSettings();
   const AndroidInitializationSettings initializationSettingsAndroid =
@@ -75,40 +73,38 @@ void main() async {
       linux: initializationSettingsLinux,
       iOS: initializationSettingsIos);
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  await IsarController().openDB();
-  await initSettings();
-  runApp(const MyApp());
-}
 
-Future<void> setOptimalDisplayMode() async {
-  final List<DisplayMode> supported = await FlutterDisplayMode.supported;
-  final DisplayMode active = await FlutterDisplayMode.active;
-  final List<DisplayMode> sameResolution = supported
-      .where((DisplayMode m) =>
-          m.width == active.width && m.height == active.height)
-      .toList()
-    ..sort((DisplayMode a, DisplayMode b) =>
-        b.refreshRate.compareTo(a.refreshRate));
-  final DisplayMode mostOptimalMode =
-      sameResolution.isNotEmpty ? sameResolution.first : active;
-  await FlutterDisplayMode.setPreferredMode(mostOptimalMode);
+  runApp(const MyApp());
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      setOptimalDisplayMode();
+    }
+  });
 }
 
 Future<void> initSettings() async {
-  settings = isar.settings.where().findFirstSync() ?? Settings();
-  if (settings.language == null) {
-    settings.language = '${Get.deviceLocale}';
-    isar.writeTxnSync(() => isar.settings.putSync(settings));
-  }
+  FirebaseFirestore firestore = FirebaseFirestore.instance;
+  DocumentSnapshot settingsSnapshot =
+      await firestore.collection('settings').doc('settings').get();
 
-  if (settings.theme == null) {
-    settings.theme = 'system';
-    isar.writeTxnSync(() => isar.settings.putSync(settings));
-  }
-
-  if (settings.isImage == null) {
-    settings.isImage = true;
-    isar.writeTxnSync(() => isar.settings.putSync(settings));
+  if (settingsSnapshot.exists) {
+    settings = Settings.fromFirestore(settingsSnapshot);
+  } else {
+    settings = Settings(
+      onboard: false,
+      theme: 'system',
+      amoledTheme: false,
+      materialColor: false,
+      isImage: true,
+      timeformat: '24',
+      firstDay: 'monday',
+      language: 'en_US',
+    );
+    await firestore
+        .collection('settings')
+        .doc('settings')
+        .set(settings.toFirestore());
   }
 }
 
@@ -191,6 +187,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void initState() {
+    super.initState();
     amoledTheme = settings.amoledTheme;
     materialColor = settings.materialColor;
     timeformat = settings.timeformat;
@@ -198,7 +195,6 @@ class _MyAppState extends State<MyApp> {
     isImage = settings.isImage!;
     locale = Locale(
         settings.language!.substring(0, 2), settings.language!.substring(3));
-    super.initState();
   }
 
   @override
@@ -249,5 +245,54 @@ class _MyAppState extends State<MyApp> {
         },
       ),
     );
+  }
+}
+
+class Settings {
+  bool onboard;
+  String? theme;
+  bool amoledTheme;
+  bool materialColor;
+  bool? isImage;
+  String timeformat;
+  String firstDay;
+  String? language;
+
+  Settings({
+    required this.onboard,
+    this.theme,
+    required this.amoledTheme,
+    required this.materialColor,
+    this.isImage,
+    required this.timeformat,
+    required this.firstDay,
+    this.language,
+  });
+
+  factory Settings.fromFirestore(DocumentSnapshot doc) {
+    Map data = doc.data() as Map;
+    return Settings(
+      onboard: data['onboard'] ?? false,
+      theme: data['theme'],
+      amoledTheme: data['amoledTheme'] ?? false,
+      materialColor: data['materialColor'] ?? false,
+      isImage: data['isImage'] ?? true,
+      timeformat: data['timeformat'] ?? '24',
+      firstDay: data['firstDay'] ?? 'monday',
+      language: data['language'] ?? 'en_US',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'onboard': onboard,
+      'theme': theme,
+      'amoledTheme': amoledTheme,
+      'materialColor': materialColor,
+      'isImage': isImage,
+      'timeformat': timeformat,
+      'firstDay': firstDay,
+      'language': language,
+    };
   }
 }

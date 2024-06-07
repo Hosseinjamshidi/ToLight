@@ -1,7 +1,7 @@
-import 'package:todark/app/data/schema.dart';
-import 'package:todark/app/controller/todo_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:todark/app/data/models.dart';
+import 'package:todark/app/controller/todo_controller.dart';
 import 'package:todark/app/modules/todos/widgets/todo_card.dart';
 import 'package:todark/app/modules/todos/widgets/todos_action.dart';
 import 'package:todark/app/widgets/list_empty.dart';
@@ -40,7 +40,7 @@ class _TodosListState extends State<TodosList> {
           List<Todos> filteredList = widget.task != null
               ? todoController.todos
                   .where((todo) =>
-                      todo.task.value?.id == widget.task?.id &&
+                      todo.taskId == widget.task?.id &&
                       todo.done == widget.done &&
                       (widget.searchTodo.isEmpty ||
                           todo.name.toLowerCase().contains(widget.searchTodo)))
@@ -48,7 +48,11 @@ class _TodosListState extends State<TodosList> {
               : widget.allTodos
                   ? todoController.todos
                       .where((todo) =>
-                          todo.task.value?.archive == false &&
+                          todoController.tasks
+                                  .firstWhereOrNull(
+                                      (task) => task.id == todo.taskId)
+                                  ?.archive ==
+                              false &&
                           todo.done == widget.done &&
                           (widget.searchTodo.isEmpty ||
                               todo.name
@@ -58,7 +62,11 @@ class _TodosListState extends State<TodosList> {
                   : widget.calendare
                       ? todoController.todos
                           .where((todo) =>
-                              todo.task.value?.archive == false &&
+                              todoController.tasks
+                                      .firstWhereOrNull(
+                                          (task) => task.id == todo.taskId)
+                                      ?.archive ==
+                                  false &&
                               todo.todoCompletedTime != null &&
                               todo.todoCompletedTime!.isAfter(
                                 DateTime(
@@ -108,7 +116,7 @@ class _TodosListState extends State<TodosList> {
                   children: [
                     ...todos.map(
                       (todo) => TodoCard(
-                        key: ValueKey(todo),
+                        key: ValueKey(todo.id),
                         todo: todo,
                         allTodos: widget.allTodos,
                         calendare: widget.calendare,

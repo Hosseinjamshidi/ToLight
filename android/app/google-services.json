@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "106503309304",
+    "project_id": "onedo-e1fe8",
+    "storage_bucket": "onedo-e1fe8.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:106503309304:android:1bd7cd2dd690fc97f1780d",
+        "android_client_info": {
+          "package_name": "com.android.application"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADlM6qbLXVpMEiSv-TKwm2jjl-6QMf7ck"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:106503309304:android:117b48f47b8e4031f1780d",
+        "android_client_info": {
+          "package_name": "com.yoshi.todark"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADlM6qbLXVpMEiSv-TKwm2jjl-6QMf7ck"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
