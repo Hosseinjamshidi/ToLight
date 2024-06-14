@@ -1,5 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class Users {
+  String uid;
+  String email;
+  String displayName;
+
+  Users({
+    required this.uid,
+    required this.email,
+    this.displayName = '',
+  });
+
+  factory Users.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    return Users(
+      uid: data['uid'],
+      email: data['email'],
+      displayName: data['displayName'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'uid': uid,
+      'email': email,
+      'displayName': displayName,
+    };
+  }
+}
+
 class Settings {
   int id;
   bool onboard;
@@ -10,6 +39,7 @@ class Settings {
   bool? isImage;
   String? language;
   String firstDay;
+  String userId;
 
   Settings({
     required this.id,
@@ -21,12 +51,12 @@ class Settings {
     this.isImage = true,
     this.language,
     this.firstDay = 'monday',
+    required this.userId,
   });
 
-  factory Settings.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map;
+  factory Settings.fromFirestore(Map<String, dynamic> data) {
     return Settings(
-      id: data['id'],
+      id: data['id'] ?? 0,
       onboard: data['onboard'] ?? false,
       theme: data['theme'] ?? 'system',
       timeformat: data['timeformat'] ?? '24',
@@ -35,6 +65,7 @@ class Settings {
       isImage: data['isImage'] ?? true,
       language: data['language'],
       firstDay: data['firstDay'] ?? 'monday',
+      userId: data['userId'] ?? '',
     );
   }
 
@@ -49,6 +80,7 @@ class Settings {
       'isImage': isImage,
       'language': language,
       'firstDay': firstDay,
+      'userId': userId,
     };
   }
 }
@@ -60,6 +92,7 @@ class Tasks {
   int taskColor;
   bool archive;
   int? index;
+  String userId; // Add user ID to link to a specific user
 
   Tasks({
     required this.id,
@@ -68,6 +101,7 @@ class Tasks {
     this.archive = false,
     required this.taskColor,
     this.index,
+    required this.userId, // Initialize with user ID
   });
 
   factory Tasks.fromFirestore(DocumentSnapshot doc) {
@@ -79,6 +113,7 @@ class Tasks {
       taskColor: data['taskColor'],
       archive: data['archive'] ?? false,
       index: data['index'],
+      userId: data['userId'], // Extract user ID
     );
   }
 
@@ -90,6 +125,7 @@ class Tasks {
       'taskColor': taskColor,
       'archive': archive,
       'index': index,
+      'userId': userId, // Include user ID
     };
   }
 }
@@ -117,6 +153,7 @@ class Todos {
   double timeSpent;
   int daysPassed;
   int? taskId; // Store task ID instead of the entire task object
+  String userId; // Add user ID to link to a specific user
 
   Todos({
     required this.id,
@@ -141,6 +178,7 @@ class Todos {
     this.timeSpent = 0.0,
     this.daysPassed = 0,
     this.taskId, // Initialize with task ID
+    required this.userId, // Initialize with user ID
   });
 
   factory Todos.fromFirestore(DocumentSnapshot doc) {
@@ -176,6 +214,7 @@ class Todos {
       timeSpent: (data['timeSpent'] as num?)?.toDouble() ?? 0.0,
       daysPassed: data['daysPassed'] ?? 0,
       taskId: data['taskId'], // Extract task ID
+      userId: data['userId'], // Extract user ID
     );
   }
 
@@ -203,6 +242,7 @@ class Todos {
       'timeSpent': timeSpent,
       'daysPassed': daysPassed,
       'taskId': taskId, // Include task ID
+      'userId': userId, // Include user ID
     };
   }
 }

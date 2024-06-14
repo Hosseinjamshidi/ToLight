@@ -8,6 +8,8 @@ import 'package:get/get.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -17,13 +19,21 @@ import 'theme/theme_controller.dart';
 import 'translation/translation.dart';
 import 'app/modules/home.dart';
 import 'app/modules/onboarding.dart';
+import 'app/modules/auth_screen.dart';
 import 'theme/theme.dart';
+import 'app/data/models.dart' as app_models;
+
+Future<void> clearLocalStorage() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.clear();
+}
 
 FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-late Settings settings;
+app_models.Settings? settings; // Make settings nullable
 
+String theme = "system";
 bool amoledTheme = false;
 bool materialColor = false;
 bool isImage = true;
@@ -52,9 +62,7 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
-  await initSettings(); // Ensure settings are initialized before running the app
-
+  clearLocalStorage();
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(systemNavigationBarColor: Colors.black));
 
@@ -74,6 +82,9 @@ Future<void> main() async {
       iOS: initializationSettingsIos);
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
+  // Initialize the ThemeController before running the app
+  Get.put(ThemeController());
+
   runApp(const MyApp());
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -84,14 +95,41 @@ Future<void> main() async {
 }
 
 Future<void> initSettings() async {
+  User? user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    return; // Handle the case where user is not logged in
+  }
+
   FirebaseFirestore firestore = FirebaseFirestore.instance;
-  DocumentSnapshot settingsSnapshot =
-      await firestore.collection('settings').doc('settings').get();
+  DocumentSnapshot settingsSnapshot = await firestore
+      .collection('users')
+      .doc(user.uid)
+      .collection('settings')
+      .doc('settings')
+      .get();
 
   if (settingsSnapshot.exists) {
-    settings = Settings.fromFirestore(settingsSnapshot);
+    settings = app_models.Settings.fromFirestore(
+        settingsSnapshot.data() as Map<String, dynamic>);
+    // Apply settings immediately
+    theme = settings!.theme!;
+    amoledTheme = settings!.amoledTheme;
+    materialColor = settings!.materialColor;
+    timeformat = settings!.timeformat;
+    firstDay = settings!.firstDay;
+    isImage = settings!.isImage!;
+    locale = Locale(
+        settings!.language!.substring(0, 2), settings!.language!.substring(3));
+    Get.find<ThemeController>().changeThemeMode(
+      theme == 'system'
+          ? ThemeMode.system
+          : theme == 'dark'
+              ? ThemeMode.dark
+              : ThemeMode.light,
+    );
   } else {
-    settings = Settings(
+    settings = app_models.Settings(
+      id: DateTime.now().millisecondsSinceEpoch,
       onboard: false,
       theme: 'system',
       amoledTheme: false,
@@ -100,19 +138,68 @@ Future<void> initSettings() async {
       timeformat: '24',
       firstDay: 'monday',
       language: 'en_US',
+      userId: user.uid,
     );
     await firestore
+        .collection('users')
+        .doc(user.uid)
         .collection('settings')
         .doc('settings')
-        .set(settings.toFirestore());
+        .set(settings!.toFirestore());
   }
 }
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late Future<void> _initAppFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAppFuture = initSettings();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initAppFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          );
+        } else if (snapshot.hasError) {
+          return MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Text('Error initializing app: ${snapshot.error}'),
+              ),
+            ),
+          );
+        } else {
+          return const MyAppLoaded();
+        }
+      },
+    );
+  }
+}
+
+class MyAppLoaded extends StatefulWidget {
+  const MyAppLoaded({super.key});
+
   static Future<void> updateAppState(
     BuildContext context, {
+    String? newTheme,
     bool? newAmoledTheme,
     bool? newMaterialColor,
     bool? newIsImage,
@@ -120,13 +207,16 @@ class MyApp extends StatefulWidget {
     String? newFirstDay,
     Locale? newLocale,
   }) async {
-    final state = context.findAncestorStateOfType<_MyAppState>()!;
+    final state = context.findAncestorStateOfType<_MyAppLoadedState>()!;
 
+    if (newTheme != null) {
+      state.changeTheme(newTheme);
+    }
     if (newAmoledTheme != null) {
       state.changeAmoledTheme(newAmoledTheme);
     }
     if (newMaterialColor != null) {
-      state.changeMarerialTheme(newMaterialColor);
+      state.changeMaterialTheme(newMaterialColor);
     }
     if (newTimeformat != null) {
       state.changeTimeFormat(newTimeformat);
@@ -143,11 +233,24 @@ class MyApp extends StatefulWidget {
   }
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  _MyAppLoadedState createState() => _MyAppLoadedState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppLoadedState extends State<MyAppLoaded> {
   final themeController = Get.put(ThemeController());
+
+  void changeTheme(String newTheme) {
+    setState(() {
+      theme = newTheme;
+      themeController.changeThemeMode(
+        newTheme == 'system'
+            ? ThemeMode.system
+            : newTheme == 'dark'
+                ? ThemeMode.dark
+                : ThemeMode.light,
+      );
+    });
+  }
 
   void changeAmoledTheme(bool newAmoledTheme) {
     setState(() {
@@ -155,7 +258,7 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  void changeMarerialTheme(bool newMaterialColor) {
+  void changeMaterialTheme(bool newMaterialColor) {
     setState(() {
       materialColor = newMaterialColor;
     });
@@ -183,18 +286,30 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       locale = newLocale;
     });
+    Get.updateLocale(newLocale);
   }
 
   @override
   void initState() {
     super.initState();
-    amoledTheme = settings.amoledTheme;
-    materialColor = settings.materialColor;
-    timeformat = settings.timeformat;
-    firstDay = settings.firstDay;
-    isImage = settings.isImage!;
-    locale = Locale(
-        settings.language!.substring(0, 2), settings.language!.substring(3));
+    if (settings != null) {
+      theme = settings!.theme!;
+      amoledTheme = settings!.amoledTheme;
+      materialColor = settings!.materialColor;
+      timeformat = settings!.timeformat;
+      firstDay = settings!.firstDay;
+      isImage = settings!.isImage!;
+      locale = Locale(settings!.language!.substring(0, 2),
+          settings!.language!.substring(3));
+      themeController.changeThemeMode(
+        theme == 'system'
+            ? ThemeMode.system
+            : theme == 'dark'
+                ? ThemeMode.dark
+                : ThemeMode.light,
+      );
+      Get.updateLocale(locale);
+    }
   }
 
   @override
@@ -238,61 +353,43 @@ class _MyAppState extends State<MyApp> {
             supportedLocales:
                 appLanguages.map((e) => e['locale'] as Locale).toList(),
             debugShowCheckedModeBanner: false,
-            home: settings.onboard ? const HomePage() : const OnBording(),
+            home: StreamBuilder<User?>(
+              stream: FirebaseAuth.instance.authStateChanges(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator(); // Show loading indicator
+                } else if (snapshot.hasData) {
+                  return FutureBuilder<void>(
+                    future: initSettings(),
+                    builder: (context, settingsSnapshot) {
+                      if (settingsSnapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        return const CircularProgressIndicator(); // Show loading indicator
+                      } else if (settingsSnapshot.hasError) {
+                        return Scaffold(
+                          body: Center(
+                            child: Text(
+                                'Error initializing settings: ${settingsSnapshot.error}'),
+                          ),
+                        );
+                      } else {
+                        // Check onboard status
+                        return settings != null && settings!.onboard
+                            ? const HomePage()
+                            : const OnBording();
+                      }
+                    },
+                  );
+                } else {
+                  return const OnBording(); // Show onboarding if no user is logged in
+                }
+              },
+            ),
             builder: EasyLoading.init(),
             title: 'ToDark',
           );
         },
       ),
     );
-  }
-}
-
-class Settings {
-  bool onboard;
-  String? theme;
-  bool amoledTheme;
-  bool materialColor;
-  bool? isImage;
-  String timeformat;
-  String firstDay;
-  String? language;
-
-  Settings({
-    required this.onboard,
-    this.theme,
-    required this.amoledTheme,
-    required this.materialColor,
-    this.isImage,
-    required this.timeformat,
-    required this.firstDay,
-    this.language,
-  });
-
-  factory Settings.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map;
-    return Settings(
-      onboard: data['onboard'] ?? false,
-      theme: data['theme'],
-      amoledTheme: data['amoledTheme'] ?? false,
-      materialColor: data['materialColor'] ?? false,
-      isImage: data['isImage'] ?? true,
-      timeformat: data['timeformat'] ?? '24',
-      firstDay: data['firstDay'] ?? 'monday',
-      language: data['language'] ?? 'en_US',
-    );
-  }
-
-  Map<String, dynamic> toFirestore() {
-    return {
-      'onboard': onboard,
-      'theme': theme,
-      'amoledTheme': amoledTheme,
-      'materialColor': materialColor,
-      'isImage': isImage,
-      'timeformat': timeformat,
-      'firstDay': firstDay,
-      'language': language,
-    };
   }
 }

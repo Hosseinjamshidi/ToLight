@@ -22,7 +22,7 @@ class _CalendarTodosState extends State<CalendarTodos> {
   CalendarFormat calendarFormat = CalendarFormat.week;
 
   StartingDayOfWeek firstDayOfWeek() {
-    switch (settings.firstDay) {
+    switch (settings?.firstDay ?? 'monday') {
       case 'monday':
         return StartingDayOfWeek.monday;
       case 'tuesday':

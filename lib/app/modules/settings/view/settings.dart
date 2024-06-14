@@ -1,13 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:todark/app/controller/todo_controller.dart';
+import 'package:todark/app/modules/auth_screen.dart';
 import 'package:todark/main.dart';
 import 'package:todark/theme/theme_controller.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:todark/app/modules/settings/widgets/settings_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -30,16 +32,20 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> updateLanguage(Locale locale) async {
-    await firestore
-        .collection('settings')
-        .doc('settings')
-        .update({'language': '$locale'});
+    await todoController.updateSetting('language', locale.toString());
     Get.updateLocale(locale);
     Get.back();
   }
 
   String firstDayOfWeek(String newValue) {
     Map<String, String> translations = {
+      'monday': 'monday',
+      'tuesday': 'tuesday',
+      'wednesday': 'wednesday',
+      'thursday': 'thursday',
+      'friday': 'friday',
+      'saturday': 'saturday',
+      'sunday': 'sunday',
       'monday'.tr: 'monday',
       'tuesday'.tr: 'tuesday',
       'wednesday'.tr: 'wednesday',
@@ -56,6 +62,26 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     infoVersion();
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    // Perform any cleanup tasks here
+    super.dispose();
+  }
+
+  void updateSetting(String key, dynamic value) async {
+    await todoController.updateSetting(key, value);
+    todoController.updateLocalSettings(); // Update local settings
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> logout() async {
+    await FirebaseAuth.instance.signOut();
+    Get.offAll(
+        () => const AuthScreen()); // Navigate to auth screen after logout
   }
 
   @override
@@ -102,27 +128,26 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.moon),
                                 text: 'theme'.tr,
                                 dropdown: true,
-                                dropdownName: settings.theme?.tr,
-                                dropdownList: <String>[
-                                  'system'.tr,
-                                  'dark'.tr,
-                                  'light'.tr
+                                dropdownName: settings?.theme ?? 'system',
+                                dropdownList: const <String>[
+                                  'system',
+                                  'dark',
+                                  'light'
                                 ],
-                                dropdownCange: (String? newValue) {
-                                  ThemeMode themeMode =
-                                      newValue?.tr == 'system'.tr
-                                          ? ThemeMode.system
-                                          : newValue?.tr == 'dark'.tr
-                                              ? ThemeMode.dark
-                                              : ThemeMode.light;
-                                  String theme = newValue?.tr == 'system'.tr
+                                dropdownChange: (String? newValue) {
+                                  ThemeMode themeMode = newValue == 'system'
+                                      ? ThemeMode.system
+                                      : newValue == 'dark'
+                                          ? ThemeMode.dark
+                                          : ThemeMode.light;
+                                  String theme = newValue == 'system'
                                       ? 'system'
-                                      : newValue?.tr == 'dark'.tr
+                                      : newValue == 'dark'
                                           ? 'dark'
                                           : 'light';
                                   themeController.saveTheme(theme);
                                   themeController.changeThemeMode(themeMode);
-                                  setState(() {});
+                                  updateSetting('theme', theme);
                                 },
                               ),
                               SettingCard(
@@ -130,10 +155,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.mobile),
                                 text: 'amoledTheme'.tr,
                                 switcher: true,
-                                value: settings.amoledTheme,
+                                value: settings?.amoledTheme ?? false,
                                 onChange: (value) {
                                   themeController.saveOledTheme(value);
-                                  MyApp.updateAppState(context,
+                                  updateSetting('amoledTheme', value);
+                                  MyAppLoaded.updateAppState(context,
                                       newAmoledTheme: value);
                                 },
                               ),
@@ -142,10 +168,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.colorfilter),
                                 text: 'materialColor'.tr,
                                 switcher: true,
-                                value: settings.materialColor,
+                                value: settings?.materialColor ?? false,
                                 onChange: (value) {
                                   themeController.saveMaterialTheme(value);
-                                  MyApp.updateAppState(context,
+                                  updateSetting('materialColor', value);
+                                  MyAppLoaded.updateAppState(context,
                                       newMaterialColor: value);
                                 },
                               ),
@@ -154,13 +181,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.image),
                                 text: 'isImages'.tr,
                                 switcher: true,
-                                value: settings.isImage,
+                                value: settings?.isImage ?? true,
                                 onChange: (value) {
-                                  firestore
-                                      .collection('settings')
-                                      .doc('settings')
-                                      .update({'isImage': value});
-                                  MyApp.updateAppState(context,
+                                  updateSetting('isImage', value);
+                                  MyAppLoaded.updateAppState(context,
                                       newIsImage: value);
                                 },
                               ),
@@ -203,20 +227,14 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.clock),
                                 text: 'timeformat'.tr,
                                 dropdown: true,
-                                dropdownName: settings.timeformat.tr,
-                                dropdownList: <String>['12'.tr, '24'.tr],
-                                dropdownCange: (String? newValue) {
-                                  firestore
-                                      .collection('settings')
-                                      .doc('settings')
-                                      .update({
-                                    'timeformat':
-                                        newValue == '12'.tr ? '12' : '24'
-                                  });
-                                  MyApp.updateAppState(context,
-                                      newTimeformat:
-                                          newValue == '12'.tr ? '12' : '24');
-                                  setState(() {});
+                                dropdownName: settings?.timeformat ?? '24',
+                                dropdownList: const <String>['12', '24'],
+                                dropdownChange: (String? newValue) {
+                                  String timeformat =
+                                      newValue == '12' ? '12' : '24';
+                                  updateSetting('timeformat', timeformat);
+                                  MyAppLoaded.updateAppState(context,
+                                      newTimeformat: timeformat);
                                 },
                               ),
                               SettingCard(
@@ -224,28 +242,22 @@ class _SettingsPageState extends State<SettingsPage> {
                                 icon: const Icon(Iconsax.calendar_edit),
                                 text: 'firstDayOfWeek'.tr,
                                 dropdown: true,
-                                dropdownName: settings.firstDay.tr,
-                                dropdownList: <String>[
-                                  'monday'.tr,
-                                  'tuesday'.tr,
-                                  'wednesday'.tr,
-                                  'thursday'.tr,
-                                  'friday'.tr,
-                                  'saturday'.tr,
-                                  'sunday'.tr,
+                                dropdownName: settings?.firstDay ?? 'monday',
+                                dropdownList: const <String>[
+                                  'monday',
+                                  'tuesday',
+                                  'wednesday',
+                                  'thursday',
+                                  'friday',
+                                  'saturday',
+                                  'sunday',
                                 ],
-                                dropdownCange: (String? newValue) {
+                                dropdownChange: (String? newValue) {
                                   if (newValue != null) {
                                     final firstDay = firstDayOfWeek(newValue);
-                                    firestore
-                                        .collection('settings')
-                                        .doc('settings')
-                                        .update({
-                                      'firstDay': firstDay,
-                                    });
-                                    MyApp.updateAppState(context,
-                                        newTimeformat: firstDay);
-                                    setState(() {});
+                                    updateSetting('firstDay', firstDay);
+                                    MyAppLoaded.updateAppState(context,
+                                        newFirstDay: firstDay);
                                   }
                                 },
                               ),
@@ -303,7 +315,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                       textAlign: TextAlign.center,
                                     ),
                                     onTap: () {
-                                      MyApp.updateAppState(context,
+                                      MyAppLoaded.updateAppState(context,
                                           newLocale: appLanguages[index]
                                               ['locale']);
                                       updateLanguage(
@@ -481,6 +493,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     mode: LaunchMode.externalApplication)) {
                   throw Exception('Could not launch $url');
                 }
+              },
+            ),
+            SettingCard(
+              icon: const Icon(Iconsax.logout), // Icon for logout
+              text: 'logout'.tr,
+              onPressed: () async {
+                await logout();
               },
             ),
           ],

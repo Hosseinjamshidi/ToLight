@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:todark/app/modules/home.dart';
 import 'package:todark/app/widgets/button.dart';
+import 'package:todark/main.dart'; // Import to access global settings variable
+import 'package:todark/app/modules/auth_screen.dart'; // Import the AuthScreen
+import 'package:todark/app/data/models.dart' as app_models;
 
 class OnBording extends StatefulWidget {
   const OnBording({super.key});
@@ -14,6 +18,9 @@ class OnBording extends StatefulWidget {
 class _OnBordingState extends State<OnBording> {
   late PageController pageController;
   int pageIndex = 0;
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final FirebaseAuth auth = FirebaseAuth.instance;
+  User? get currentUser => auth.currentUser;
 
   @override
   void initState() {
@@ -27,15 +34,50 @@ class _OnBordingState extends State<OnBording> {
     super.dispose();
   }
 
-  void onBoardHome() async {
-    FirebaseFirestore firestore = FirebaseFirestore.instance;
+  Future<void> onBoardHome() async {
+    if (currentUser == null) {
+      // Navigate to login page if user is not authenticated
+      Get.off(() => const AuthScreen(), transition: Transition.downToUp);
+      return;
+    }
 
-    // Update Firestore settings
-    await firestore.collection('settings').doc('settings').update({
-      'onboard': true,
-    });
+    final docRef = firestore
+        .collection('users')
+        .doc(currentUser!.uid)
+        .collection('settings')
+        .doc('settings');
 
-    Get.off(() => const HomePage(), transition: Transition.downToUp);
+    try {
+      // Check if the document exists
+      final docSnapshot = await docRef.get();
+
+      if (!docSnapshot.exists) {
+        // Create the document if it does not exist
+        settings = app_models.Settings(
+          id: DateTime.now().millisecondsSinceEpoch,
+          onboard: true, // Setting onboard to true after onboarding is complete
+          theme: 'system',
+          amoledTheme: false,
+          materialColor: false,
+          isImage: true,
+          timeformat: '24',
+          firstDay: 'monday',
+          language: 'en_US',
+          userId: currentUser!.uid,
+        );
+        await docRef.set(settings!.toFirestore());
+      } else {
+        // Update the onboard field to true
+        await docRef.update({'onboard': true});
+      }
+
+      // Initialize the settings again to ensure they are loaded
+      await initSettings();
+
+      Get.off(() => const HomePage(), transition: Transition.downToUp);
+    } catch (e) {
+      print("Error completing onboarding: $e");
+    }
   }
 
   @override

@@ -1,13 +1,19 @@
-import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:todark/app/data/models.dart' as app_models;
 import 'package:todark/app/data/models.dart';
 import 'package:todark/app/services/notification.dart';
 import 'package:todark/main.dart';
 
 class TodoController extends GetxController {
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final FirebaseAuth auth = FirebaseAuth.instance;
+  User? get currentUser => auth.currentUser;
+
   final tasks = <Tasks>[].obs;
   final todos = <Todos>[].obs;
 
@@ -31,8 +37,6 @@ class TodoController extends GetxController {
   TextEditingController descTodoEdit = TextEditingController();
   TextEditingController timeTodoEdit = TextEditingController();
 
-  FirebaseFirestore firestore = FirebaseFirestore.instance;
-
   @override
   void onInit() {
     super.onInit();
@@ -41,7 +45,10 @@ class TodoController extends GetxController {
   }
 
   Future<List<Tasks>> getTasks() async {
+    if (currentUser == null) return [];
     var querySnapshot = await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('tasks')
         .where('archive', isEqualTo: false)
         .get();
@@ -49,20 +56,33 @@ class TodoController extends GetxController {
   }
 
   Future<void> loadTasks() async {
-    var querySnapshot = await firestore.collection('tasks').get();
+    if (currentUser == null) return;
+    var querySnapshot = await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
+        .collection('tasks')
+        .get();
     tasks.assignAll(
         querySnapshot.docs.map((doc) => Tasks.fromFirestore(doc)).toList());
   }
 
   Future<void> loadTodos() async {
-    var querySnapshot = await firestore.collection('todos').get();
+    if (currentUser == null) return;
+    var querySnapshot = await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
+        .collection('todos')
+        .get();
     todos.assignAll(
         querySnapshot.docs.map((doc) => Todos.fromFirestore(doc)).toList());
   }
 
   // Tasks
   Future<void> addTask(String title, String desc, Color myColor) async {
+    if (currentUser == null) return;
     var searchTask = await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('tasks')
         .where('title', isEqualTo: title)
         .get();
@@ -72,11 +92,14 @@ class TodoController extends GetxController {
       title: title,
       description: desc,
       taskColor: myColor.value,
+      userId: currentUser!.uid,
     );
 
     if (searchTask.docs.isEmpty) {
       tasks.add(taskCreate);
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('tasks')
           .doc(taskCreate.id.toString())
           .set(taskCreate.toFirestore());
@@ -88,10 +111,13 @@ class TodoController extends GetxController {
 
   Future<void> updateTask(
       Tasks task, String title, String desc, Color myColor) async {
+    if (currentUser == null) return;
     task.title = title;
     task.description = desc;
     task.taskColor = myColor.value;
     await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('tasks')
         .doc(task.id.toString())
         .update(task.toFirestore());
@@ -106,11 +132,14 @@ class TodoController extends GetxController {
   }
 
   Future<void> deleteTask(List<Tasks> taskList) async {
+    if (currentUser == null) return;
     List<Tasks> taskListCopy = List.from(taskList);
 
     for (var task in taskListCopy) {
       // Delete Notification
       var getTodo = await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .where('taskId', isEqualTo: task.id)
           .get();
@@ -126,28 +155,43 @@ class TodoController extends GetxController {
       // Delete Todos
       todos.removeWhere((todo) => todo.taskId == task.id);
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .where('taskId', isEqualTo: task.id)
           .get()
           .then((querySnapshot) {
         for (var doc in querySnapshot.docs) {
-          firestore.collection('todos').doc(doc.id).delete();
+          firestore
+              .collection('users')
+              .doc(currentUser!.uid)
+              .collection('todos')
+              .doc(doc.id)
+              .delete();
         }
       });
 
       // Delete Task
       tasks.remove(task);
-      await firestore.collection('tasks').doc(task.id.toString()).delete();
+      await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('tasks')
+          .doc(task.id.toString())
+          .delete();
       EasyLoading.showSuccess('categoryDelete'.tr, duration: duration);
     }
   }
 
   Future<void> archiveTask(List<Tasks> taskList) async {
+    if (currentUser == null) return;
     List<Tasks> taskListCopy = List.from(taskList);
 
     for (var task in taskListCopy) {
       // Delete Notification
       var getTodo = await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .where('taskId', isEqualTo: task.id)
           .get();
@@ -163,6 +207,8 @@ class TodoController extends GetxController {
       // Archive Task
       task.archive = true;
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('tasks')
           .doc(task.id.toString())
           .update(task.toFirestore());
@@ -173,11 +219,14 @@ class TodoController extends GetxController {
   }
 
   Future<void> noArchiveTask(List<Tasks> taskList) async {
+    if (currentUser == null) return;
     List<Tasks> taskListCopy = List.from(taskList);
 
     for (var task in taskListCopy) {
       // Create Notification
       var getTodo = await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .where('taskId', isEqualTo: task.id)
           .get();
@@ -198,6 +247,8 @@ class TodoController extends GetxController {
       // No archive Task
       task.archive = false;
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('tasks')
           .doc(task.id.toString())
           .update(task.toFirestore());
@@ -210,6 +261,7 @@ class TodoController extends GetxController {
   // Todos
   Future<void> addTodo(
       Tasks task, String title, String desc, String time) async {
+    if (currentUser == null) return;
     DateTime? date;
     if (time.isNotEmpty) {
       date = timeformat == '12'
@@ -217,6 +269,8 @@ class TodoController extends GetxController {
           : DateFormat.yMMMEd(locale.languageCode).add_Hm().parse(time);
     }
     var getTodos = await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('todos')
         .where('name', isEqualTo: title)
         .where('taskId', isEqualTo: task.id)
@@ -229,11 +283,14 @@ class TodoController extends GetxController {
       description: desc,
       todoCompletedTime: date,
       taskId: task.id,
+      userId: currentUser!.uid,
     );
 
     if (getTodos.docs.isEmpty) {
       todos.add(todosCreate);
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .doc(todosCreate.id.toString())
           .set(todosCreate.toFirestore());
@@ -252,7 +309,10 @@ class TodoController extends GetxController {
   }
 
   Future<void> updateTodoCheck(Todos todo) async {
+    if (currentUser == null) return;
     await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('todos')
         .doc(todo.id.toString())
         .update(todo.toFirestore());
@@ -260,8 +320,11 @@ class TodoController extends GetxController {
   }
 
   Future<void> updateTodoFix(Todos todo) async {
+    if (currentUser == null) return;
     todo.fix = !todo.fix;
     await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('todos')
         .doc(todo.id.toString())
         .update(todo.toFirestore());
@@ -274,6 +337,7 @@ class TodoController extends GetxController {
 
   Future<void> updateTodo(
       Todos todo, Tasks task, String title, String desc, String time) async {
+    if (currentUser == null) return;
     DateTime? date;
     if (time.isNotEmpty) {
       date = timeformat == '12'
@@ -287,6 +351,8 @@ class TodoController extends GetxController {
     todo.taskId = task.id;
 
     await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
         .collection('todos')
         .doc(todo.id.toString())
         .update(todo.toFirestore());
@@ -311,11 +377,14 @@ class TodoController extends GetxController {
   }
 
   Future<void> transferTodos(List<Todos> todoList, Tasks task) async {
+    if (currentUser == null) return;
     List<Todos> todoListCopy = List.from(todoList);
 
     for (var todo in todoListCopy) {
       todo.taskId = task.id;
       await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
           .collection('todos')
           .doc(todo.id.toString())
           .update(todo.toFirestore());
@@ -332,6 +401,7 @@ class TodoController extends GetxController {
   }
 
   Future<void> deleteTodo(List<Todos> todoList) async {
+    if (currentUser == null) return;
     List<Todos> todoListCopy = List.from(todoList);
 
     for (var todo in todoListCopy) {
@@ -341,7 +411,12 @@ class TodoController extends GetxController {
         }
       }
       todos.remove(todo);
-      await firestore.collection('todos').doc(todo.id.toString()).delete();
+      await firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('todos')
+          .doc(todo.id.toString())
+          .delete();
       EasyLoading.showSuccess('todoDelete'.tr, duration: duration);
     }
   }
@@ -421,5 +496,69 @@ class TodoController extends GetxController {
     selectedTodo.clear();
     isMultiSelectionTodo.value = false;
     isPop.value = true;
+  }
+
+  // Settings
+  Future<void> updateSetting(String key, dynamic value) async {
+    if (currentUser == null || settings == null) return;
+
+    // Update the settings object
+    switch (key) {
+      case 'theme':
+        settings!.theme = value;
+        break;
+      case 'amoledTheme':
+        settings!.amoledTheme = value;
+        break;
+      case 'materialColor':
+        settings!.materialColor = value;
+        break;
+      case 'isImage':
+        settings!.isImage = value;
+        break;
+      case 'timeformat':
+        settings!.timeformat = value;
+        break;
+      case 'firstDay':
+        settings!.firstDay = value;
+        break;
+      case 'language':
+        settings!.language = value;
+        break;
+      default:
+        return;
+    }
+
+    // Save the updated settings to Firestore
+    await firestore
+        .collection('users')
+        .doc(currentUser!.uid)
+        .collection('settings')
+        .doc('settings')
+        .set(settings!.toFirestore());
+
+    // Refresh the local settings
+    updateLocalSettings();
+  }
+
+  Future<void> updateLocalSettings() async {
+    User? user = currentUser;
+    if (user == null) {
+      return; // Handle the case where user is not logged in
+    }
+
+    FirebaseFirestore firestore = FirebaseFirestore.instance;
+    DocumentSnapshot settingsSnapshot = await firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('settings')
+        .doc('settings')
+        .get();
+
+    if (settingsSnapshot.exists) {
+      settings = app_models.Settings.fromFirestore(
+          settingsSnapshot.data() as Map<String, dynamic>);
+      update();
+    }
   }
 }

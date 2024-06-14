@@ -14,12 +14,13 @@ class SettingCard extends StatelessWidget {
     this.elevation,
     this.dropdownName,
     this.dropdownList,
-    this.dropdownCange,
+    this.dropdownChange,
     this.value,
     this.onPressed,
     this.onChange,
     this.textInfo,
   });
+
   final Widget icon;
   final String text;
   final bool switcher;
@@ -29,7 +30,7 @@ class SettingCard extends StatelessWidget {
   final String? textInfo;
   final String? dropdownName;
   final List<String>? dropdownList;
-  final Function(String?)? dropdownCange;
+  final Function(String?)? dropdownChange;
   final bool? value;
   final Function()? onPressed;
   final Function(bool)? onChange;
@@ -52,7 +53,7 @@ class SettingCard extends StatelessWidget {
             ? Transform.scale(
                 scale: 0.8,
                 child: Switch(
-                  value: value!,
+                  value: value ?? false,
                   onChanged: onChange,
                 ),
               )
@@ -60,14 +61,14 @@ class SettingCard extends StatelessWidget {
                 ? DropdownButton<String>(
                     underline: Container(),
                     value: dropdownName,
-                    items: dropdownList!
-                        .map<DropdownMenuItem<String>>((String value) {
+                    items: dropdownList
+                        ?.map<DropdownMenuItem<String>>((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
                         child: Text(value),
                       );
                     }).toList(),
-                    onChanged: dropdownCange,
+                    onChanged: dropdownChange,
                   )
                 : info
                     ? infoSettings
@@ -76,7 +77,7 @@ class SettingCard extends StatelessWidget {
                               Padding(
                                 padding: const EdgeInsets.only(right: 5),
                                 child: Text(
-                                  textInfo!,
+                                  textInfo ?? '',
                                   style: context.textTheme.bodyMedium,
                                   overflow: TextOverflow.visible,
                                 ),
@@ -90,7 +91,7 @@ class SettingCard extends StatelessWidget {
                         : Padding(
                             padding: const EdgeInsets.only(right: 5),
                             child: Text(
-                              textInfo!,
+                              textInfo ?? '',
                               style: context.textTheme.titleMedium,
                               overflow: TextOverflow.visible,
                             ),
