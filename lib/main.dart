@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:todark/app/controller/todo_controller.dart';
 import 'firebase_options.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -22,11 +23,6 @@ import 'app/modules/onboarding.dart';
 import 'app/modules/auth_screen.dart';
 import 'theme/theme.dart';
 import 'app/data/models.dart' as app_models;
-
-Future<void> clearLocalStorage() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.clear();
-}
 
 FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -62,7 +58,7 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  clearLocalStorage();
+
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(systemNavigationBarColor: Colors.black));
 
@@ -127,6 +123,16 @@ Future<void> initSettings() async {
               ? ThemeMode.dark
               : ThemeMode.light,
     );
+    // Apply other settings
+    MyAppLoaded.updateAppState(
+      Get.context!,
+      newAmoledTheme: amoledTheme,
+      newMaterialColor: materialColor,
+      newIsImage: isImage,
+      newTimeformat: timeformat,
+      newFirstDay: firstDay,
+      newLocale: locale,
+    );
   } else {
     settings = app_models.Settings(
       id: DateTime.now().millisecondsSinceEpoch,
@@ -157,40 +163,29 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late Future<void> _initAppFuture;
+  bool _settingsInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _initAppFuture = initSettings();
+    initSettings().then((_) {
+      setState(() {
+        _settingsInitialized = true;
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _initAppFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const MaterialApp(
+    return _settingsInitialized
+        ? const MyAppLoaded()
+        : const MaterialApp(
             home: Scaffold(
               body: Center(
-                child: CircularProgressIndicator(),
+                child: Text('Loading...'),
               ),
             ),
           );
-        } else if (snapshot.hasError) {
-          return MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: Text('Error initializing app: ${snapshot.error}'),
-              ),
-            ),
-          );
-        } else {
-          return const MyAppLoaded();
-        }
-      },
-    );
   }
 }
 
@@ -237,7 +232,41 @@ class MyAppLoaded extends StatefulWidget {
 }
 
 class _MyAppLoadedState extends State<MyAppLoaded> {
-  final themeController = Get.put(ThemeController());
+  late ThemeController themeController;
+
+  @override
+  void initState() {
+    super.initState();
+    themeController = Get.find<ThemeController>();
+    if (settings != null) {
+      theme = settings!.theme!;
+      amoledTheme = settings!.amoledTheme;
+      materialColor = settings!.materialColor;
+      timeformat = settings!.timeformat;
+      firstDay = settings!.firstDay;
+      isImage = settings!.isImage!;
+      locale = Locale(settings!.language!.substring(0, 2),
+          settings!.language!.substring(3));
+      themeController.changeThemeMode(
+        theme == 'system'
+            ? ThemeMode.system
+            : theme == 'dark'
+                ? ThemeMode.dark
+                : ThemeMode.light,
+      );
+      MyAppLoaded.updateAppState(
+        context,
+        newTheme: theme,
+        newAmoledTheme: amoledTheme,
+        newMaterialColor: materialColor,
+        newIsImage: isImage,
+        newTimeformat: timeformat,
+        newFirstDay: firstDay,
+        newLocale: locale,
+      );
+      Get.find<TodoController>().updateLocalSettings();
+    }
+  }
 
   void changeTheme(String newTheme) {
     setState(() {
@@ -290,29 +319,6 @@ class _MyAppLoadedState extends State<MyAppLoaded> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    if (settings != null) {
-      theme = settings!.theme!;
-      amoledTheme = settings!.amoledTheme;
-      materialColor = settings!.materialColor;
-      timeformat = settings!.timeformat;
-      firstDay = settings!.firstDay;
-      isImage = settings!.isImage!;
-      locale = Locale(settings!.language!.substring(0, 2),
-          settings!.language!.substring(3));
-      themeController.changeThemeMode(
-        theme == 'system'
-            ? ThemeMode.system
-            : theme == 'dark'
-                ? ThemeMode.dark
-                : ThemeMode.light,
-      );
-      Get.updateLocale(locale);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -357,14 +363,22 @@ class _MyAppLoadedState extends State<MyAppLoaded> {
               stream: FirebaseAuth.instance.authStateChanges(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator(); // Show loading indicator
-                } else if (snapshot.hasData) {
+                  return const Scaffold(
+                    body: Center(
+                      child: Text('Loading...'),
+                    ),
+                  );
+                } else if (snapshot.hasData && settings == null) {
                   return FutureBuilder<void>(
                     future: initSettings(),
                     builder: (context, settingsSnapshot) {
                       if (settingsSnapshot.connectionState ==
                           ConnectionState.waiting) {
-                        return const CircularProgressIndicator(); // Show loading indicator
+                        return const Scaffold(
+                          body: Center(
+                            child: Text('Loading...'),
+                          ),
+                        );
                       } else if (settingsSnapshot.hasError) {
                         return Scaffold(
                           body: Center(
@@ -373,13 +387,14 @@ class _MyAppLoadedState extends State<MyAppLoaded> {
                           ),
                         );
                       } else {
-                        // Check onboard status
-                        return settings != null && settings!.onboard
-                            ? const HomePage()
-                            : const OnBording();
+                        return const OnBording();
                       }
                     },
                   );
+                } else if (snapshot.hasData && settings != null) {
+                  return settings!.onboard
+                      ? const HomePage()
+                      : const AuthScreen();
                 } else {
                   return const OnBording(); // Show onboarding if no user is logged in
                 }

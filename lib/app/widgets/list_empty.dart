@@ -17,7 +17,7 @@ class ListEmpty extends StatelessWidget {
       child: ListView(
         shrinkWrap: true,
         children: [
-          isImage
+          true
               ? Image.asset(
                   img,
                   scale: 5,

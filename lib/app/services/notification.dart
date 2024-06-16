@@ -1,4 +1,5 @@
 import 'package:todark/main.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -20,18 +21,31 @@ class NotificationShow {
     NotificationDetails notificationDetails =
         NotificationDetails(android: androidNotificationDetails);
 
-    var scheduledTime = tz.TZDateTime.from(date!, tz.local);
-    flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      scheduledTime,
-      notificationDetails,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'notlification-payload',
-    );
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      var scheduledTime = tz.TZDateTime.from(date!, tz.local);
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduledTime,
+        notificationDetails,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'notification-payload',
+      );
+    } else {
+      // For platforms that do not support zonedSchedule, show an immediate notification
+      await flutterLocalNotificationsPlugin.show(
+        id,
+        title,
+        body,
+        notificationDetails,
+        payload: 'notification-payload',
+      );
+    }
   }
 
   Future<void> requestNotificationPermission() async {
