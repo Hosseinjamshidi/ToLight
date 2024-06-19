@@ -1,5 +1,4 @@
 import 'package:todark/main.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -21,23 +20,36 @@ class NotificationShow {
     NotificationDetails notificationDetails =
         NotificationDetails(android: androidNotificationDetails);
 
-    if (!kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS)) {
-      var scheduledTime = tz.TZDateTime.from(date!, tz.local);
-      await flutterLocalNotificationsPlugin.zonedSchedule(
-        id,
-        title,
-        body,
-        scheduledTime,
-        notificationDetails,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'notification-payload',
-      );
+    if (date != null) {
+      var scheduledTime = tz.TZDateTime.from(date, tz.local);
+      if (flutterLocalNotificationsPlugin
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestNotificationsPermission() !=
+          null) {
+        await flutterLocalNotificationsPlugin.zonedSchedule(
+          id,
+          title,
+          body,
+          scheduledTime,
+          notificationDetails,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'notification-payload',
+        );
+      } else {
+        // For platforms that do not support zonedSchedule, show an immediate notification
+        await flutterLocalNotificationsPlugin.show(
+          id,
+          title,
+          body,
+          notificationDetails,
+          payload: 'notification-payload',
+        );
+      }
     } else {
-      // For platforms that do not support zonedSchedule, show an immediate notification
+      // Show immediate notification if date is null
       await flutterLocalNotificationsPlugin.show(
         id,
         title,

@@ -3,11 +3,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:todark/app/data/models.dart';
 import 'package:todark/app/controller/todo_controller.dart';
+import 'package:todark/app/widgets/input_card.dart';
 import 'package:todark/app/widgets/text_form.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:todark/main.dart';
+import 'package:number_text_input_formatter/number_text_input_formatter.dart';
 
 class TodosAction extends StatefulWidget {
   const TodosAction({
@@ -33,6 +35,26 @@ class _TodosActionState extends State<TodosAction> {
   final todoController = Get.put(TodoController());
   Tasks? selectedTask;
   final FocusNode focusNode = FocusNode();
+  int priority = 3; // Initialize priority as an integer
+  double _currentValue = 1.0; // Initial value for task duration
+  TextEditingController durationController = TextEditingController();
+  bool _isFeatureEnabled = false; // Initialize the switch value
+  String _selectedCategory = 'Work'; // Initialize dropdown value
+
+  final List<DropdownMenuItem<String>> _dropdownItems = [
+    DropdownMenuItem(
+      value: 'Work',
+      child: Text('Work'),
+    ),
+    DropdownMenuItem(
+      value: 'Personal',
+      child: Text('Personal'),
+    ),
+    DropdownMenuItem(
+      value: 'Other',
+      child: Text('Other'),
+    ),
+  ];
 
   @override
   initState() {
@@ -54,7 +76,11 @@ class _TodosActionState extends State<TodosAction> {
                       .add_Hm()
                       .format(widget.todo!.todoCompletedTime!)
               : '');
+      priority = widget.todo!.priority; // Set the priority
+      _currentValue = widget.todo!.duration; // Set the duration
     }
+    durationController.text =
+        _currentValue.toStringAsFixed(1); // Initialize the controller
     super.initState();
   }
 
@@ -82,6 +108,24 @@ class _TodosActionState extends State<TodosAction> {
     while (value.text.contains('  ')) {
       value.text = value.text.replaceAll('  ', ' ');
     }
+  }
+
+  void _increment() {
+    setState(() {
+      _currentValue += 0.5;
+      durationController.text =
+          _currentValue.toStringAsFixed(1); // Update the controller
+    });
+  }
+
+  void _decrement() {
+    setState(() {
+      if (_currentValue >= 1) {
+        _currentValue -= 0.5;
+        durationController.text =
+            _currentValue.toStringAsFixed(1); // Update the controller
+      }
+    });
   }
 
   @override
@@ -189,6 +233,7 @@ class _TodosActionState extends State<TodosAction> {
                                       todoController.titleTodoEdit.text,
                                       todoController.descTodoEdit.text,
                                       todoController.timeTodoEdit.text,
+                                      priority,
                                     )
                                   : widget.category
                                       ? todoController.addTodo(
@@ -196,12 +241,14 @@ class _TodosActionState extends State<TodosAction> {
                                           todoController.titleTodoEdit.text,
                                           todoController.descTodoEdit.text,
                                           todoController.timeTodoEdit.text,
+                                          priority,
                                         )
                                       : todoController.addTodo(
                                           widget.task!,
                                           todoController.titleTodoEdit.text,
                                           todoController.descTodoEdit.text,
                                           todoController.timeTodoEdit.text,
+                                          priority,
                                         );
                               todoController.textTodoConroller.clear();
                               todoController.titleTodoEdit.clear();
@@ -219,6 +266,30 @@ class _TodosActionState extends State<TodosAction> {
                     ),
                   ],
                 ),
+              ),
+              MyTextForm(
+                elevation: 4,
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                controller: todoController.titleTodoEdit,
+                labelText: 'name'.tr,
+                type: TextInputType.multiline,
+                icon: const Icon(Iconsax.edit_2),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'validateName'.tr;
+                  }
+                  return null;
+                },
+                maxLine: null,
+              ),
+              MyTextForm(
+                elevation: 4,
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                controller: todoController.descTodoEdit,
+                labelText: 'description'.tr,
+                type: TextInputType.multiline,
+                icon: const Icon(Iconsax.note_text),
+                maxLine: null,
               ),
               widget.category
                   ? RawAutocomplete<Tasks>(
@@ -314,30 +385,6 @@ class _TodosActionState extends State<TodosAction> {
               MyTextForm(
                 elevation: 4,
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                controller: todoController.titleTodoEdit,
-                labelText: 'name'.tr,
-                type: TextInputType.multiline,
-                icon: const Icon(Iconsax.edit_2),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'validateName'.tr;
-                  }
-                  return null;
-                },
-                maxLine: null,
-              ),
-              MyTextForm(
-                elevation: 4,
-                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                controller: todoController.descTodoEdit,
-                labelText: 'description'.tr,
-                type: TextInputType.multiline,
-                icon: const Icon(Iconsax.note_text),
-                maxLine: null,
-              ),
-              MyTextForm(
-                elevation: 4,
-                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 readOnly: true,
                 controller: todoController.timeTodoEdit,
                 labelText: 'timeComplete'.tr,
@@ -400,6 +447,56 @@ class _TodosActionState extends State<TodosAction> {
                     use24hFormat: timeformat == '12' ? false : true,
                     dateOrder: DatePickerDateOrder.dmy,
                   ).show(context);
+                },
+              ),
+              InputCard(
+                icon: const Icon(Iconsax.slider_vertical),
+                text: 'Priority',
+                sliderInput: true,
+                sliderValue: priority.toDouble(),
+                minSliderValue: 1,
+                maxSliderValue: 5,
+                divisions: 4,
+                onSliderChange: (value) {
+                  setState(() {
+                    priority = value.toInt();
+                  });
+                },
+              ),
+              InputCard(
+                icon: const Icon(Iconsax.timer),
+                text: 'Task Duration',
+                numberInput: true,
+                numberController: durationController,
+                onNumberChange: (value) {
+                  setState(() {
+                    _currentValue = double.tryParse(value) ?? _currentValue;
+                  });
+                },
+                onIncrement: _increment,
+                onDecrement: _decrement,
+              ),
+              InputCard(
+                icon: const Icon(Iconsax.toggle_on),
+                text: 'Enable Feature',
+                switchInput: true,
+                switchValue: _isFeatureEnabled,
+                onSwitchChange: (value) {
+                  setState(() {
+                    _isFeatureEnabled = value;
+                  });
+                },
+              ),
+              InputCard(
+                icon: const Icon(Iconsax.folder),
+                text: 'Category',
+                dropdownInput: true,
+                dropdownValue: _selectedCategory,
+                dropdownItems: _dropdownItems,
+                onDropdownChange: (value) {
+                  setState(() {
+                    _selectedCategory = value!;
+                  });
                 },
               ),
               const SizedBox(height: 10),

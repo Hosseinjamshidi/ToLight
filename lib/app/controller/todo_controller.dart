@@ -260,7 +260,7 @@ class TodoController extends GetxController {
 
   // Todos
   Future<void> addTodo(
-      Tasks task, String title, String desc, String time) async {
+      Tasks task, String title, String desc, String time, int priority) async {
     if (currentUser == null) return;
     DateTime? date;
     if (time.isNotEmpty) {
@@ -283,6 +283,7 @@ class TodoController extends GetxController {
       description: desc,
       todoCompletedTime: date,
       taskId: task.id,
+      priority: priority,
       userId: currentUser!.uid,
     );
 
@@ -335,8 +336,8 @@ class TodoController extends GetxController {
     todos.refresh();
   }
 
-  Future<void> updateTodo(
-      Todos todo, Tasks task, String title, String desc, String time) async {
+  Future<void> updateTodo(Todos todo, Tasks task, String title, String desc,
+      String time, int priority) async {
     if (currentUser == null) return;
     DateTime? date;
     if (time.isNotEmpty) {
