@@ -1,15 +1,13 @@
-import 'package:bottom_picker/bottom_picker.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:todark/app/data/models.dart';
 import 'package:todark/app/controller/todo_controller.dart';
 import 'package:todark/app/widgets/input_card.dart';
+import 'package:todark/app/widgets/custom_date_picker_bottom_sheet.dart';
 import 'package:todark/app/widgets/text_form.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:todark/main.dart';
-import 'package:number_text_input_formatter/number_text_input_formatter.dart';
 
 class TodosAction extends StatefulWidget {
   const TodosAction({
@@ -35,29 +33,104 @@ class _TodosActionState extends State<TodosAction> {
   final todoController = Get.put(TodoController());
   Tasks? selectedTask;
   final FocusNode focusNode = FocusNode();
-  int priority = 3; // Initialize priority as an integer
-  double _currentValue = 1.0; // Initial value for task duration
+  int priority = 3;
+  double _currentValue = 1.0;
   TextEditingController durationController = TextEditingController();
-  bool _isFeatureEnabled = false; // Initialize the switch value
-  String _selectedCategory = 'Work'; // Initialize dropdown value
+  bool _isFeatureEnabled = false;
+  String _selectedCategory = 'Work';
+  TimeOfDay? _selectedTime;
+  DateTime? _selectedDate;
+  DueType _selectedDueType = DueType.dueBy;
+  String _dueDateText = 'Set Due Date';
 
   final List<DropdownMenuItem<String>> _dropdownItems = [
-    DropdownMenuItem(
+    const DropdownMenuItem(
       value: 'Work',
       child: Text('Work'),
     ),
-    DropdownMenuItem(
+    const DropdownMenuItem(
       value: 'Personal',
       child: Text('Personal'),
     ),
-    DropdownMenuItem(
+    const DropdownMenuItem(
       value: 'Other',
       child: Text('Other'),
     ),
   ];
 
+  Future<void> _pickDate() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return CustomDatePickerBottomSheet(
+          initialDate: _selectedDate ?? DateTime.now(),
+          firstDate: DateTime(2023),
+          lastDate: DateTime(2101),
+          initialTime: _selectedTime,
+          initialDueType: _selectedDueType,
+          onDateTimeChanged: (date, time, dueType) {
+            setState(() {
+              _selectedDate = date;
+              _selectedTime = time;
+              _selectedDueType = dueType;
+              _updateDueDateText();
+            });
+          },
+        );
+      },
+    );
+  }
+
+  void _updateDueDateText() {
+    if (_selectedDate != null) {
+      String formattedDate = DateFormat('dd/MM/yyyy').format(_selectedDate!);
+      String? formattedTime;
+      if (_selectedTime != null) {
+        final now = DateTime.now();
+        final DateTime formattedDateTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          _selectedTime!.hour,
+          _selectedTime!.minute,
+        );
+        formattedTime = DateFormat.Hm().format(formattedDateTime);
+      }
+
+      String formattedTimePart =
+          formattedTime != null ? ' at $formattedTime' : '';
+
+      switch (_selectedDueType) {
+        case DueType.dueBy:
+          _dueDateText = 'Due by $formattedDate$formattedTimePart';
+          break;
+        case DueType.dueOn:
+          _dueDateText = 'Due on $formattedDate$formattedTimePart';
+          break;
+        case DueType.dueEveryDay:
+          _dueDateText = 'Due every day$formattedTimePart';
+          break;
+        case DueType.dueEveryWeek:
+          _dueDateText =
+              'Due every ${DateFormat('EEEE').format(_selectedDate!)}$formattedTimePart';
+          break;
+        case DueType.dueEveryMonth:
+          final dayOfMonth = DateFormat('d').format(_selectedDate!);
+          _dueDateText = 'Due every $dayOfMonth of the month$formattedTimePart';
+          break;
+        default:
+          _dueDateText = 'Set Due Date';
+      }
+
+      todoController.timeTodoEdit.text = _dueDateText;
+    } else {
+      _dueDateText = 'Set Due Date';
+    }
+  }
+
   @override
-  initState() {
+  void initState() {
     if (widget.edit) {
       selectedTask = todoController.tasks
           .firstWhereOrNull((task) => task.id == widget.todo!.taskId);
@@ -76,11 +149,13 @@ class _TodosActionState extends State<TodosAction> {
                       .add_Hm()
                       .format(widget.todo!.todoCompletedTime!)
               : '');
-      priority = widget.todo!.priority; // Set the priority
-      _currentValue = widget.todo!.duration; // Set the duration
+      priority = widget.todo!.priority;
+      _currentValue = widget.todo!.duration;
+      _selectedDate = widget.todo!.todoCompletedTime;
+      _selectedDueType = widget.todo!.dueType;
+      _updateDueDateText();
     }
-    durationController.text =
-        _currentValue.toStringAsFixed(1); // Initialize the controller
+    durationController.text = _currentValue.toStringAsFixed(1);
     super.initState();
   }
 
@@ -94,8 +169,7 @@ class _TodosActionState extends State<TodosAction> {
   }
 
   Future<List<Tasks>> getTaskAll(String pattern) async {
-    List<Tasks> getTask = await todoController
-        .getTasks(); // Assuming getTasks is a method in your controller that fetches tasks from Firestore
+    List<Tasks> getTask = await todoController.getTasks();
     return getTask.where((element) {
       final title = element.title.toLowerCase();
       final query = pattern.toLowerCase();
@@ -113,8 +187,7 @@ class _TodosActionState extends State<TodosAction> {
   void _increment() {
     setState(() {
       _currentValue += 0.5;
-      durationController.text =
-          _currentValue.toStringAsFixed(1); // Update the controller
+      durationController.text = _currentValue.toStringAsFixed(1);
     });
   }
 
@@ -122,8 +195,7 @@ class _TodosActionState extends State<TodosAction> {
     setState(() {
       if (_currentValue >= 1) {
         _currentValue -= 0.5;
-        durationController.text =
-            _currentValue.toStringAsFixed(1); // Update the controller
+        durationController.text = _currentValue.toStringAsFixed(1);
       }
     });
   }
@@ -398,56 +470,13 @@ class _TodosActionState extends State<TodosAction> {
                         ),
                         onPressed: () {
                           todoController.timeTodoEdit.clear();
-                          setState(() {});
+                          setState(() {
+                            _dueDateText = 'Set Due Date';
+                          });
                         },
                       )
                     : null,
-                onTap: () {
-                  BottomPicker.dateTime(
-                    titlePadding: const EdgeInsets.only(top: 10),
-                    pickerTitle: Text(
-                      'time'.tr,
-                      style: context.textTheme.titleMedium!,
-                    ),
-                    pickerDescription: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'timeDesc'.tr,
-                        style: context.textTheme.labelLarge!
-                            .copyWith(color: Colors.grey),
-                      ),
-                    ),
-                    titleAlignment: Alignment.centerLeft,
-                    pickerTextStyle:
-                        context.textTheme.labelMedium!.copyWith(fontSize: 15),
-                    closeIconColor: Colors.red,
-                    backgroundColor: context.theme.primaryColor,
-                    onSubmit: (date) {
-                      String formattedDate = timeformat == '12'
-                          ? DateFormat.yMMMEd(locale.languageCode)
-                              .add_jm()
-                              .format(date)
-                          : DateFormat.yMMMEd(locale.languageCode)
-                              .add_Hm()
-                              .format(date);
-                      todoController.timeTodoEdit.text = formattedDate;
-                      setState(() {});
-                    },
-                    buttonContent: Text(
-                      'select'.tr,
-                      textAlign: TextAlign.center,
-                    ),
-                    buttonStyle: BoxDecoration(
-                      color: context.theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    minDateTime: DateTime.now(),
-                    maxDateTime: DateTime.now().add(const Duration(days: 1000)),
-                    initialDateTime: DateTime.now(),
-                    use24hFormat: timeformat == '12' ? false : true,
-                    dateOrder: DatePickerDateOrder.dmy,
-                  ).show(context);
-                },
+                onTap: _pickDate,
               ),
               InputCard(
                 icon: const Icon(Iconsax.slider_vertical),

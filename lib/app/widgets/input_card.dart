@@ -17,6 +17,11 @@ class InputCard extends StatelessWidget {
     this.dropdownValue,
     this.dropdownItems,
     this.onDropdownChange,
+    this.timeValue,
+    this.onTimePick,
+    this.dateValue,
+    this.onDatePick,
+    this.dateTimeInput = false,
     this.minSliderValue = 0,
     this.maxSliderValue = 100,
     this.divisions,
@@ -24,6 +29,8 @@ class InputCard extends StatelessWidget {
     this.sliderInput = false,
     this.switchInput = false,
     this.dropdownInput = false,
+    this.timeInput = false,
+    this.dateInput = false,
   });
 
   final Widget icon;
@@ -39,6 +46,11 @@ class InputCard extends StatelessWidget {
   final String? dropdownValue;
   final List<DropdownMenuItem<String>>? dropdownItems;
   final Function(String?)? onDropdownChange;
+  final TimeOfDay? timeValue;
+  final Function()? onTimePick;
+  final DateTime? dateValue;
+  final Function()? onDatePick;
+  final bool dateTimeInput;
   final double minSliderValue;
   final double maxSliderValue;
   final int? divisions;
@@ -46,76 +58,88 @@ class InputCard extends StatelessWidget {
   final bool sliderInput;
   final bool switchInput;
   final bool dropdownInput;
+  final bool timeInput;
+  final bool dateInput;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 4,
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10.0),
-            leading: icon,
-            title: Text(
-              text,
-              style: context.textTheme.labelLarge,
-              overflow: TextOverflow.visible,
-            ),
-            trailing: numberInput
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: onDecrement,
-                        icon: const Icon(Icons.remove),
-                      ),
-                      SizedBox(
-                        width: constraints.maxWidth * 0.15,
-                        child: TextFormField(
-                          controller: numberController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(vertical: 5.0),
+      child: InkWell(
+        onTap: dateInput || dateTimeInput
+            ? onDatePick
+            : (timeInput ? onTimePick : null),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10.0),
+              leading: icon,
+              title: Text(
+                text,
+                style: context.textTheme.labelLarge,
+                overflow: TextOverflow.visible,
+              ),
+              trailing: numberInput
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: onDecrement,
+                          icon: const Icon(Icons.remove),
+                        ),
+                        SizedBox(
+                          width: constraints.maxWidth * 0.15,
+                          child: TextFormField(
+                            controller: numberController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 5.0),
+                            ),
+                            onChanged: onNumberChange,
                           ),
-                          onChanged: onNumberChange,
                         ),
-                      ),
-                      IconButton(
-                        onPressed: onIncrement,
-                        icon: const Icon(Icons.add),
-                      ),
-                    ],
-                  )
-                : sliderInput
-                    ? SizedBox(
-                        width: constraints.maxWidth * 0.60,
-                        child: Slider(
-                          value: sliderValue ?? 0,
-                          min: minSliderValue,
-                          max: maxSliderValue,
-                          divisions: divisions,
-                          label: sliderValue?.toString(),
-                          onChanged: onSliderChange,
+                        IconButton(
+                          onPressed: onIncrement,
+                          icon: const Icon(Icons.add),
                         ),
-                      )
-                    : switchInput
-                        ? Switch(
-                            value: switchValue ?? false,
-                            onChanged: onSwitchChange,
-                          )
-                        : dropdownInput
-                            ? DropdownButton<String>(
-                                underline: Container(),
-                                value: dropdownValue,
-                                items: dropdownItems,
-                                onChanged: onDropdownChange,
-                              )
-                            : Container(),
-          );
-        },
+                      ],
+                    )
+                  : sliderInput
+                      ? SizedBox(
+                          width: constraints.maxWidth * 0.60,
+                          child: Slider(
+                            value: sliderValue ?? 0,
+                            min: minSliderValue,
+                            max: maxSliderValue,
+                            divisions: divisions,
+                            label: sliderValue?.toString(),
+                            onChanged: onSliderChange,
+                          ),
+                        )
+                      : switchInput
+                          ? Switch(
+                              value: switchValue ?? false,
+                              onChanged: onSwitchChange,
+                            )
+                          : dropdownInput
+                              ? DropdownButton<String>(
+                                  underline: Container(),
+                                  value: dropdownValue,
+                                  items: dropdownItems,
+                                  onChanged: onDropdownChange,
+                                )
+                              : timeInput || dateInput
+                                  ? null
+                                  : dateTimeInput
+                                      ? null
+                                      : Container(),
+            );
+          },
+        ),
       ),
     );
   }

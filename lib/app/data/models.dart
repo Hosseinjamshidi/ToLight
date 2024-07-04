@@ -165,7 +165,7 @@ class Todos {
     this.priority = 3,
     this.duration = 1.0,
     this.selected = false,
-    this.dueType = DueType.doneBy,
+    this.dueType = DueType.dueBy,
     this.strict = false,
     this.dependencies = const [],
     this.startDate,
@@ -248,12 +248,12 @@ class Todos {
 }
 
 enum DueType {
-  doneAt,
-  doneBy,
-  doneBetween,
-  doneEveryDay,
-  doneEveryWeek,
-  doneEveryMonth,
+  dueBy,
+  dueOn,
+  dueEveryDay,
+  dueEveryWeek,
+  dueEveryMonth,
+  dueBetween,
 }
 
 enum Status {
